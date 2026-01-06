@@ -72,20 +72,19 @@ src0 = src
 
 src = mvf.Depth(src, 16)
 
-# Did not use this approach as JET suggested, this ArtCNN + EEDI3 failed to deliver same AA quality as the one I am using now
-#src = vsaa.based_aa(src, rfactor=2, mask=False, alpha=0.5, beta=0.2)
+src = core.descale.Debicubic(src, width=1280, height=720, b=0, c=1/2)
 
-d_src = core.descale.Debicubic(src, width=1280, height=720, b=0, c=1/2)
+src = vsaa.based_aa(src, rfactor=2, mask=False, supersampler=vsaa.deinterlacers.NNEDI3, alpha=1.0, beta=0.0)
 
 # TODO: denoise
 
 # TODO: deband
 
 # Use nnedi3 to scale up 2X then resize to 1080p
-src = nnedi3_rpow2(d_src, qual=2).resize.Spline36(width=1920, height=1080)
+src = nnedi3_rpow2(src, qual=2).resize.Spline36(width=1920, height=1080)
 
 src = mvf.Depth(src, 10)
 
 src0.set_output(0)
 src.set_output(1)
-src_ref.set_output(3)
+src_ref.set_output(2)
