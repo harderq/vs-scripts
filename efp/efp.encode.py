@@ -45,12 +45,11 @@ def edgefix(clip):
     clip = awf.bbmod(clip, left=2, right=2, top=2, bottom=2, planes=[0, 1, 2], blur=500, scale_thresh=False, cpass2=False)
     return clip
 
-def denoise(clip):
-    linemask = kgf.retinex_edgemask(clip).std.Maximum()
-    ref_clip = core.dfttest.DFTTest(clip, sigma=8)
-    denoised_clip = mvf.BM3D(clip, sigma=3.0, radius1=0, ref=ref_clip)
-    clip = core.std.MaskedMerge(denoised_clip, clip, linemask)
-    clip = denoised_clip
+def denoise(clip, sigma):
+    clip = mvf.Depth(clip, 32)
+    basic_clip = core.bm3dhip.BM3D(clip, sigma=sigma, radius=0)
+    clip = core.bm3dhip.BM3D(clip, sigma=sigma, ref=basic_clip, radius=0)
+    clip = mvf.Depth(clip, 16)
     return clip
 
 def deband(clip, linemask):
@@ -58,30 +57,41 @@ def deband(clip, linemask):
     clip = core.std.MaskedMerge(debanded_clip, clip, linemask)
     return clip
 
+def grain(clip):
+    clip = kgf.adaptive_grain(clip, strength=0.2, static=True, luma_scaling=10)
+    return clip
+
 def print_screenshots(src0, src1):
     awf.ScreenGen(src0, HOMEPATH, "a")
     awf.ScreenGen(src1, HOMEPATH, "b")
 
-bd_src = core.bs.VideoSource(source=f"{HOMEPATH}/efp.avc")
+bd_src = core.bs.VideoSource(source=f"{HOMEPATH}/efp.remux.mkv")
 
 src = mvf.Depth(bd_src, 16)
 
 src = edgefix(src)
+unfiltered_src = src
+
+linemask = kgf.retinex_edgemask(src)
 
 y, _, _ = kgf.split(src)
 descaled_y = core.descale.Debicubic(y, width=1280, height=720, b=1/3, c=1/3)
 
-# AA on luma plane
-descaled_y = denoise(descaled_y)
+descaled_y = denoise(descaled_y, 2.0)
+
 aa_y = eedi3(descaled_y, alpha=0.1, beta=0.3, gamma=200)
 aa_y = core.resize.Spline36(aa_y, width=1920, height=1080)
 
 src = core.std.ShufflePlanes([aa_y, src], planes=[0, 1, 2], colorfamily=vs.YUV)
 
-linemask = kgf.retinex_edgemask(src)
+src = denoise(src, [0, 2.0, 2.0])
+
 src = deband(src, linemask)
+
+src = grain(src)
+
+src = core.remap.Rfs(src, unfiltered_src, mappings="[0 599] [141874 146687] [147456 149201] [149468 149639]")
 
 src = mvf.Depth(src, 10)
 
-bd_src.set_output(0)
-src.set_output(1)
+src.set_output(0)
